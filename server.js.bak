@@ -97,36 +97,61 @@ function findLastCommonIndex(
 // merge timeline
 // ========================
 
-
 function mergeMessages(
   timelineMessages,
   kelivoMessages
 ) {
 
-  const merged = [
-    ...timelineMessages
-  ];
-
-  for (
-    const msg of kelivoMessages
+  if (
+    timelineMessages.length === 0
   ) {
 
-    const exists =
-      merged.some(
-        m =>
-          JSON.stringify(m) ===
-          JSON.stringify(msg)
+    return kelivoMessages;
+  }
+
+  const commonIndex =
+    findLastCommonIndex(
+      timelineMessages,
+      kelivoMessages
+    );
+
+      console.log(
+        "\ncommonIndex =",
+        commonIndex
       );
 
-    if (!exists) {
+  if (commonIndex === -1) {
 
-      merged.push(msg);
-    }
+    return [
+      ...timelineMessages,
+      ...kelivoMessages
+    ].slice(-50);
   }
+
+  const extraTimelineMessages =
+    timelineMessages.slice(
+      commonIndex + 1
+    );
+
+  const kelivoNewMessages =
+    kelivoMessages.slice(
+      commonIndex + 1
+    );
+
+  const merged = [
+
+    ...timelineMessages.slice(
+      0,
+      commonIndex + 1
+    ),
+
+    ...extraTimelineMessages,
+
+    ...kelivoNewMessages
+  ];
 
   return merged.slice(-50);
 }
-
 
 
 // ========================

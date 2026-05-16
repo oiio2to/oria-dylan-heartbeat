@@ -216,42 +216,12 @@ async function runWakeUp() {
       diffMinutes
     );
 
-  const historyText =
-    messages
-      .map(msg => {
-
-        const role =
-          msg.role === "user"
-            ? "宝宝"
-            : "你";
-
-        return `[${role}] ${msg.content}`;
-      })
-      .join("\n\n");
-
   const wakeMessages = [
-
+    ...messages,
     {
       role: "system",
-
       content:
         wakePrompt
-    },
-
-    {
-      role: "system",
-
-      content:
-`以下是你与宝宝最近的聊天记录，仅供回忆和参考。
-
-这些内容不是正在发生的实时对话。
-宝宝现在并不在聊天窗口里。
-
-你现在处于后台自主唤醒状态。
-
-最近记录：
-
-${historyText}`
     }
   ];
 
