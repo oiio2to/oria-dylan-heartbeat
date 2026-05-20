@@ -212,6 +212,20 @@ function stripPosition(messages) {
 let wakeUpLastHeartbeat = null;
 
 // ========================
+// 预设方案
+// ========================
+const PRESETS_FILE = "./presets.json";
+
+function loadPresets() {
+  if (!fs.existsSync(PRESETS_FILE)) return [];
+  try { return fs.readJsonSync(PRESETS_FILE); } catch { return []; }
+}
+
+function savePresets(presets) {
+  fs.writeJsonSync(PRESETS_FILE, presets, { spaces: 2 });
+}
+
+// ========================
 // 安全：放行 /admin，其他仅本地/局域网
 // ========================
 app.addHook("onRequest", (req, reply, done) => {
@@ -296,6 +310,8 @@ app.post("/v1/chat/completions", async (req, reply) => {
       }
       if (!inserted) llmMessages.push(event);
     }
+
+
 
     // 调试打印
     console.log("\n===== 转发给 LLM 的 Messages（前 10 条）=====\n");
@@ -462,80 +478,487 @@ app.get("/admin", { preHandler: basicAuth }, async (req, reply) => {
   const currentBark = readEnvValue("BARK_KEY").substring(0, 10) + "…";
   const currentIcon = readEnvValue("CUSTOM_ICON_URL");
 
-  // 生成 Basic Auth 头字符串，直接注入前端
   const authToken = Buffer.from(`${process.env.ADMIN_USER}:${process.env.ADMIN_PASSWORD}`).toString("base64");
 
-  const html = `<!DOCTYPE html>
+  const presets = loadPresets();
+  const presetsJson = JSON.stringify(presets);
+
+const html = `<!DOCTYPE html>
 <html lang="zh">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>小彻网关管理</title>
+  <title>HEARTBEAT · Runtime</title>
+  <!-- 引入思源宋体 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&display=swap" rel="stylesheet">
   <style>
-    body { font-family: -apple-system, sans-serif; max-width: 500px; margin: 20px auto; padding: 20px; background: #f5f5f5; }
-    h2 { text-align: center; }
-    .status { background: #e8f5e9; padding: 12px; border-radius: 8px; margin-bottom: 20px; }
-    .status p { margin: 4px 0; }
-    label { display: block; margin-top: 12px; font-weight: bold; }
-    input { width: 100%; padding: 10px; margin-top: 4px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
-    button { width: 100%; margin-top: 20px; padding: 12px; border: none; border-radius: 8px; font-size: 16px; }
-    button.save { background: #007aff; color: white; }
-    button.restart { background: #ff3b30; color: white; }
-    button:active { opacity: 0.8; }
-    .note { margin-top: 16px; font-size: 14px; color: #888; text-align: center; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: "Noto Serif SC", Georgia, "Times New Roman", serif;
+      background: linear-gradient(135deg, #f8f0f3 0%, #f5e6eb 100%);
+      background-image: 
+        radial-gradient(circle at 20% 80%, rgba(230, 190, 200, 0.15) 0%, transparent 50%),
+        radial-gradient(circle at 80% 20%, rgba(210, 170, 180, 0.1) 0%, transparent 50%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 30px 20px;
+    }
+
+    .container {
+      max-width: 480px;
+      width: 100%;
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-radius: 24px;
+      padding: 40px 32px;
+      box-shadow: 
+        0 2px 10px rgba(180, 120, 130, 0.05),
+        0 15px 40px rgba(180, 120, 130, 0.15),
+        0 0 0 1px rgba(255, 255, 255, 0.8) inset;
+      transition: all 0.4s ease;
+    }
+
+    .container:hover {
+      box-shadow: 
+        0 2px 10px rgba(180, 120, 130, 0.08),
+        0 20px 50px rgba(180, 120, 130, 0.2),
+        0 0 0 1px rgba(255, 255, 255, 0.9) inset;
+    }
+
+    h2 {
+      text-align: center;
+      font-size: 32px;
+      font-weight: 700;
+      color: #8a4a58;
+      margin-bottom: 4px;
+      letter-spacing: 6px;
+      font-family: "Times New Roman", "Georgia", "Noto Serif SC", serif;
+      font-style: normal;
+      text-transform: uppercase;
+    }
+
+    .subtitle {
+      text-align: center;
+      font-size: 12px;
+      color: #a87a85;
+      margin-bottom: 32px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      font-style: italic;
+      opacity: 0.85;
+    }
+
+    .status {
+      background: rgba(255, 250, 252, 0.6);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-radius: 14px;
+      padding: 16px 20px;
+      margin-bottom: 24px;
+      border: 1px solid rgba(230, 200, 208, 0.4);
+    }
+
+    .status p {
+      margin: 6px 0;
+      font-size: 13px;
+      color: #6d5057;
+      font-weight: 400;
+      line-height: 1.5;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .status strong {
+      color: #8a4a58;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    label {
+      display: block;
+      margin-top: 16px;
+      font-weight: 500;
+      font-size: 11px;
+      color: #8b6b72;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    input {
+      width: 100%;
+      padding: 10px 14px;
+      margin-top: 6px;
+      border: 1px solid rgba(200, 160, 170, 0.3);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.7);
+      font-family: "Noto Serif SC", serif;
+      font-size: 13px;
+      color: #5a4046;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #c89aa6;
+      box-shadow: 0 0 0 3px rgba(200, 154, 166, 0.1);
+      background: rgba(255, 255, 255, 0.95);
+      transform: translateY(-1px);
+    }
+
+    input::placeholder {
+      color: #b8a0a6;
+      font-style: italic;
+      font-size: 12px;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 16px;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      letter-spacing: 1.5px;
+      font-family: "Noto Serif SC", serif;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      text-transform: uppercase;
+    }
+
+    button.save {
+      background: linear-gradient(135deg, #d8a0ad 0%, #c8909d 100%);
+      color: white;
+      box-shadow: 0 4px 12px rgba(180, 120, 130, 0.2);
+    }
+
+    button.save:hover {
+      background: linear-gradient(135deg, #c8909d 0%, #b8808d 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(180, 120, 130, 0.3);
+    }
+
+    button.save:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 8px rgba(180, 120, 130, 0.2);
+    }
+
+    button.restart {
+      background: linear-gradient(135deg, #e8909d 0%, #d8808d 100%);
+      color: white;
+      box-shadow: 0 4px 12px rgba(200, 100, 120, 0.25);
+      margin-top: 28px;
+    }
+
+    button.restart:hover {
+      background: linear-gradient(135deg, #d8808d 0%, #c8707d 100%);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 20px rgba(200, 100, 120, 0.35);
+    }
+
+    button.restart:active {
+      transform: translateY(0);
+      box-shadow: 0 2px 8px rgba(200, 100, 120, 0.25);
+    }
+
+    .note {
+      margin-top: 16px;
+      font-size: 10px;
+      color: #a88a92;
+      text-align: center;
+      font-style: italic;
+      letter-spacing: 1px;
+      opacity: 0.7;
+    }
+
+    /* 预设区域 */
+    .presets-box {
+      background: rgba(255, 250, 252, 0.5);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 24px;
+      border: 1px solid rgba(230, 200, 208, 0.3);
+    }
+
+    .presets-box h3 {
+      margin: 0 0 14px 0;
+      font-size: 12px;
+      color: #8a4a58;
+      font-weight: 500;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    .preset-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .preset-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .preset-btn {
+      flex: 1;
+      padding: 10px 14px;
+      background: rgba(255, 255, 255, 0.7);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      border: 1px solid rgba(220, 180, 190, 0.3);
+      border-radius: 10px;
+      text-align: left;
+      font-size: 13px;
+      color: #6d5057;
+      cursor: pointer;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      font-family: "Noto Serif SC", serif;
+    }
+
+    .preset-btn:hover {
+      background: rgba(255, 245, 248, 0.9);
+      border-color: #c89aa6;
+      box-shadow: 0 4px 12px rgba(180, 120, 130, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .preset-btn span {
+      color: #9a7a82;
+      font-size: 11px;
+      margin-left: 8px;
+      font-style: italic;
+    }
+
+    .preset-del {
+      padding: 8px 12px;
+      background: rgba(255, 240, 243, 0.6);
+      border: 1px solid rgba(240, 200, 210, 0.4);
+      border-radius: 8px;
+      font-size: 11px;
+      color: #a85a68;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .preset-del:hover {
+      background: rgba(255, 230, 235, 0.8);
+      border-color: #e8a0b0;
+      color: #9a4a58;
+    }
+
+    .add-preset {
+      border-top: 1px solid rgba(220, 180, 190, 0.3);
+      padding-top: 16px;
+    }
+
+    .add-preset strong {
+      font-size: 11px;
+      color: #8a4a58;
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 500;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+    }
+
+    .add-preset input {
+      margin-top: 6px;
+      background: rgba(255, 255, 255, 0.8);
+    }
+
+    .add-preset button {
+      background: linear-gradient(135deg, #c89aa6 0%, #b88a96 100%);
+      color: white;
+      box-shadow: 0 4px 10px rgba(160, 100, 110, 0.2);
+      font-size: 12px;
+      padding: 10px;
+    }
+
+    .add-preset button:hover {
+      background: linear-gradient(135deg, #b88a96 0%, #a87a86 100%);
+    }
+
+    .config-box {
+      background: rgba(255, 250, 252, 0.5);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border-radius: 16px;
+      padding: 20px;
+      border: 1px solid rgba(230, 200, 208, 0.3);
+    }
+
+    /* 加载动画 */
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .container {
+      animation: fadeIn 0.6s ease-out;
+    }
+
+    .status, .presets-box, .config-box {
+      animation: fadeIn 0.8s ease-out;
+    }
+
+    .restart {
+      animation: fadeIn 1s ease-out;
+    }
   </style>
 </head>
 <body>
-  <h2>⚙️ 小彻网关管理</h2>
-  <div class="status">
-    <p>🔹 Gateway (server.js): <strong>运行中 (${serverUptime}秒)</strong></p>
-    <p>🔸 自动唤醒 (wake_up.js): <strong>${wakeUpStatus}</strong></p>
+  <div class="container">
+    <h2>HEARTBEAT</h2>
+    <div class="subtitle">Runtime · AI Residency</div>
+
+    <div class="status">
+      <p>Gateway <strong>运行中 (${serverUptime}秒)</strong></p>
+      <p>Auto Wakeup <strong>${wakeUpStatus}</strong></p>
+    </div>
+
+    <!-- 预设方案 -->
+    <div class="presets-box">
+      <h3>预设方案</h3>
+      <div class="preset-list" id="presetList"></div>
+      <div class="add-preset">
+        <strong>保存当前配置为新预设</strong>
+        <input id="presetName" placeholder="预设名称，例如：DeepSeek / Claude">
+        <button onclick="savePreset()">保存为预设</button>
+      </div>
+    </div>
+
+    <!-- 配置表单 -->
+    <div class="config-box">
+      <form action="/admin/save" method="post">
+        <label>API 地址</label>
+        <input name="target_url" id="f_url" value="${currentUrl}">
+        <label>API Key</label>
+        <input name="target_key" id="f_key" placeholder="留空不修改">
+        <label>模型名称</label>
+        <input name="model_name" id="f_model" value="${currentModel}">
+        <label>Bark Key</label>
+        <input name="bark_key" placeholder="留空不修改">
+        <label>自定义图标 URL</label>
+        <input name="custom_icon" value="${currentIcon}" placeholder="可选">
+        <button type="submit" class="save">保存配置</button>
+      </form>
+    </div>
+
+    <button onclick="restartServices()" class="restart">一键重启所有服务</button>
+    <div class="note">修改配置后先保存，再点重启按钮生效</div>
   </div>
-  <form action="/admin/save" method="post">
-    <label>API 地址</label>
-    <input name="target_url" value="${currentUrl}">
-    <label>API Key (已隐藏)</label>
-    <input name="target_key" placeholder="留空不修改">
-    <label>模型名称</label>
-    <input name="model_name" value="${currentModel}">
-    <label>Bark Key (已隐藏)</label>
-    <input name="bark_key" placeholder="留空不修改">
-    <label>自定义图标 URL（可选）</label>
-    <input name="custom_icon" value="${currentIcon}">
-    <button type="submit" class="save">保存配置</button>
-  </form>
-  <button onclick="restartServices()" class="restart">🔄 一键重启所有服务</button>
-  <div class="note">修改配置后先保存，再点红色按钮重启即可生效。</div>
+
   <script>
+    // ====== 以下脚本保持不变 ======
     const AUTH_HEADER = "Basic ${authToken}";
+    let presets = ${presetsJson};
+
+    function renderPresets() {
+      const list = document.getElementById("presetList");
+      if (!presets.length) {
+        list.innerHTML = '<div style="color:#aaa;font-size:12px;font-style:italic;">还没有预设，保存当前配置即可创建。</div>';
+        return;
+      }
+      list.innerHTML = presets.map((p, idx) => {
+        const safeName = p.name.replace(/'/g, "\\'");
+        return '<div class="preset-item">' +
+          '<button class="preset-btn" onclick="applyPreset(' + idx + ')">' + p.name + '<span>' + p.model_name + '</span></button>' +
+          '<button class="preset-del" onclick="deletePreset(' + idx + ')">删除</button>' +
+        '</div>';
+      }).join("");
+    }
+
+    function applyPreset(idx) {
+      const p = presets[idx];
+      document.getElementById("f_url").value = p.target_url || "";
+      document.getElementById("f_model").value = p.model_name || "";
+      if (p.target_key) document.getElementById("f_key").value = p.target_key;
+      document.querySelector(".config-box").scrollIntoView({ behavior: "smooth" });
+    }
+
+    async function savePreset() {
+      const name = document.getElementById("presetName").value.trim();
+      const target_url = document.getElementById("f_url").value.trim();
+      const target_key = document.getElementById("f_key").value.trim();
+      const model_name = document.getElementById("f_model").value.trim();
+      if (!name) { alert("请填写预设名称"); return; }
+      if (!target_url || !model_name) { alert("请先填写 API 地址和模型名称"); return; }
+
+      const resp = await fetch("/admin/presets/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": AUTH_HEADER },
+        body: JSON.stringify({ name, target_url, target_key, model_name })
+      });
+      const r = await resp.json();
+      if (r.success) {
+        const existing = presets.findIndex(p => p.name === name);
+        const entry = { name, target_url, target_key, model_name };
+        if (existing >= 0) presets[existing] = entry;
+        else presets.push(entry);
+        renderPresets();
+        document.getElementById("presetName").value = "";
+        alert("预设已保存：" + name);
+      } else {
+        alert("保存失败：" + (r.error || "未知错误"));
+      }
+    }
+
+    async function deletePreset(idx) {
+      const p = presets[idx];
+      if (!confirm("删除预设「" + p.name + "」？")) return;
+      await fetch("/admin/presets/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": AUTH_HEADER },
+        body: JSON.stringify({ name: p.name })
+      });
+      presets.splice(idx, 1);
+      renderPresets();
+    }
+
     async function restartServices() {
       if (!confirm("确定要重启 Gateway 和 wake_up 吗？")) return;
       try {
         const resp = await fetch("/admin/restart", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": AUTH_HEADER
-          },
+          headers: { "Content-Type": "application/json", "Authorization": AUTH_HEADER },
           body: "{}"
         });
         const result = await resp.json();
         if (result.success) {
-          alert("✅ 重启成功！页面稍后自动刷新。");
+          alert("重启成功！页面稍后自动刷新。");
           setTimeout(() => location.reload(), 3000);
         } else {
-          alert("❌ 重启失败：" + (result.error || "未知错误"));
+          alert("重启失败：" + (r.error || "未知错误"));
         }
       } catch (e) {
-        alert("❌ 请求失败：" + e.message);
+        alert("请求失败：" + e.message);
       }
     }
+
+    renderPresets();
   </script>
 </body>
 </html>`;
+
   reply.type("text/html").send(html);
 });
-
 // ========================
 // 管理保存 POST /admin/save
 // ========================
@@ -564,6 +987,33 @@ ADMIN_PASSWORD=${process.env.ADMIN_PASSWORD}
   <p>现在可以返回管理页，点击重启按钮让新配置生效。</p>
   <a href="/admin">← 返回设置</a>
 </body></html>`);
+});
+
+// ========================
+// 保存预设方案
+// ========================
+app.post("/admin/presets/save", { preHandler: basicAuth }, async (req, reply) => {
+  const { name, target_url, target_key, model_name } = req.body || {};
+  if (!name || !target_url || !model_name) {
+    return reply.code(400).send({ error: "name / target_url / model_name 必填" });
+  }
+  const presets = loadPresets();
+  const existing = presets.findIndex(p => p.name === name);
+  const entry = { name, target_url, target_key: target_key || "", model_name };
+  if (existing >= 0) presets[existing] = entry;
+  else presets.push(entry);
+  savePresets(presets);
+  reply.send({ success: true });
+});
+
+// ========================
+// 删除预设方案
+// ========================
+app.post("/admin/presets/delete", { preHandler: basicAuth }, async (req, reply) => {
+  const { name } = req.body || {};
+  const presets = loadPresets().filter(p => p.name !== name);
+  savePresets(presets);
+  reply.send({ success: true });
 });
 
 // ========================
