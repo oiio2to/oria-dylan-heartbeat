@@ -88,7 +88,7 @@ nano .env   # 或使用文本编辑器，填入你的 Key 和地址
 ```env
 TARGET_API_URL=https://你的API地址/v1/chat/completions
 TARGET_API_KEY=sk-你的APIKey
-MODEL_NAME=deepseek-v4-pro
+MODEL_NAME=你的模型
 BARK_KEY=你的Bark设备Key
 CUSTOM_ICON_URL=https://你的图标URL（可选）
 ADMIN_USER=admin
