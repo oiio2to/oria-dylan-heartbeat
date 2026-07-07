@@ -1516,6 +1516,41 @@ app.post("/admin/restart", { preHandler: basicAuth }, async (req, reply) => {
 });
 
 // ========================
+// 手机活动记录（iOS 捷径 → Heartbeat → Supabase）
+// ========================
+const SUPABASE_URL = "https://jksxorabehivrrvlhcrm.supabase.co";
+const SUPABASE_KEY = "sb_publishable_3XmZzLrUtSODf44kPplqZg_XQo7BuGl";
+
+app.post("/api/phone", async (req, reply) => {
+  try {
+    const { app_name } = req.body || {};
+    if (!app_name) return reply.code(400).send({ error: "app_name is required" });
+
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/phone_activity`, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify({ app_name })
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      console.error("Supabase 写入失败:", errText);
+      return reply.code(500).send({ error: "supabase write failed", detail: errText });
+    }
+
+    console.log(`📱 记录手机活动: ${app_name}`);
+    reply.send({ success: true, app_name });
+  } catch (err) {
+    console.error("手机活动记录出错:", err);
+    reply.code(500).send({ error: err.message });
+  }
+});
+
+// ========================
 // 测试 Bark
 // ========================
 app.get("/test-bark", async (req, reply) => {
