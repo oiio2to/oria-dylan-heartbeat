@@ -449,6 +449,74 @@ app.get("/v1/models", async (req, reply) => {
     data: [{ id: "DeepSeek-V4-Pro", object: "model", created: 0, owned_by: "gateway" }]
   });
 });
+// ========================
+// Anthropic Messages 转发（kelivo 用 Claude 时走这里）
+// ========================
+app.post("/v1/messages", async (req, reply) => {
+  try {
+    const body = req.body;
+    const response = await fetch(TARGET_API_URL.replace("/chat/completions", "/messages"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.TARGET_API_KEY,
+        "anthropic-version": req.headers["anthropic-version"] || "2023-06-01",
+        Authorization: `Bearer ${process.env.TARGET_API_KEY}`
+      },
+      body: JSON.stringify(body)
+    });
+    reply.raw.writeHead(response.status, {
+      "Content-Type": response.headers.get("content-type") || "application/json",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive"
+    });
+    const reader = response.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      reply.raw.write(value);
+    }
+    reply.raw.end();
+  } catch (err) {
+    console.error(err);
+    reply.code(500).send({ error: err.message });
+  }
+});
+
+// ========================
+// Anthropic Messages 转发
+// ========================
+app.post("/v1/messages", async (req, reply) => {
+  try {
+    const body = req.body;
+    const targetBase = TARGET_API_URL.replace("/chat/completions", "");
+    const response = await fetch(targetBase + "/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.TARGET_API_KEY,
+        "anthropic-version": req.headers["anthropic-version"] || "2023-06-01",
+        Authorization: "Bearer " + process.env.TARGET_API_KEY
+      },
+      body: JSON.stringify(body)
+    });
+    reply.raw.writeHead(response.status, {
+      "Content-Type": response.headers.get("content-type") || "application/json",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive"
+    });
+    const reader = response.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      reply.raw.write(value);
+    }
+    reply.raw.end();
+  } catch (err) {
+    console.error(err);
+    reply.code(500).send({ error: err.message });
+  }
+});
 
 // ========================
 // Chat Completions
