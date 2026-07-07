@@ -434,6 +434,7 @@ app.addHook("onRequest", (req, reply, done) => {
   if (req.url.startsWith("/v1/")) return done();
   if (req.url.startsWith("/internal/")) return done();
   if (req.url.startsWith("/test-bark")) return done();
+  if (req.url.startsWith("/api/phone")) return done();
   const ip = req.ip || req.connection.remoteAddress;
   if (ip === "127.0.0.1" || ip === "::1" || ip === "localhost") return done();
   if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(ip)) return done();
