@@ -9,6 +9,24 @@ const GATEWAY_URL = `${GATEWAY_BASE_URL}/internal/wake-event`;
 const HEARTBEAT_URL = `${GATEWAY_BASE_URL}/internal/heartbeat`;
 const TIME_ZONE = process.env.TIME_ZONE || "Europe/London";
 const WEATHER_TIMEOUT_MS = 5000;
+const SUPABASE_URL = "https://jksxorabehivrrvlhcrm.supabase.co";
+const SUPABASE_KEY = "sb_publishable_3XmZzLrUtSODf44kPplqZg_XQo7BuGl";
+
+async function fetchPhoneActivity() {
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/phone_activity?order=opened_at.desc&limit=10`, {
+      headers: { "apikey": SUPABASE_KEY }
+    });
+    if (!response.ok) return "";
+    const records = await response.json();
+    if (!records.length) return "";
+    const lines = records.map(r => `- ${r.app_name}（${new Date(r.opened_at).toLocaleString("zh-CN", { timeZone: TIME_ZONE })}）`);
+    return "## 手机活动记录\n" + lines.join("\n");
+  } catch (err) {
+    console.log("读取手机活动失败:", err.message);
+    return "";
+  }
+}
 
 function readNumberEnv(key, fallback, options = {}) {
   const value = Number(process.env[key]);
@@ -276,7 +294,8 @@ async function runWakeUp() {
   }
 
   const weatherContext = await fetchWeatherContext();
-  const wakePrompt = buildWakePrompt(getChinaTimeString(), diffMinutes, weatherContext);
+  const phoneContext = await fetchPhoneActivity();
+  const wakePrompt = buildWakePrompt(getChinaTimeString(), diffMinutes, weatherContext + (phoneContext ? "\n\n" + phoneContext : ""));
   const cleanMessages = stripPosition(messages);
 
   const historyText = cleanMessages
