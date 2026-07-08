@@ -457,6 +457,51 @@ app.get("/v1/models", async (req, reply) => {
 app.post("/v1/messages", async (req, reply) => {
   try {
     const body = req.body;
+
+    // ---- 写入 timeline（与 /v1/chat/completions 相同逻辑）----
+    try {
+      // 把 Anthropic 格式转为统一的 messages 数组供 timeline 使用
+      const kelivoMessages = [];
+      // Anthropic 的 system 在 body.system 里
+      if (body.system) {
+        const systemText = typeof body.system === "string"
+          ? body.system
+          : Array.isArray(body.system)
+            ? body.system.map(b => b.text || "").join("\n")
+            : "";
+        if (systemText) {
+          kelivoMessages.push({ role: "system", content: systemText });
+        }
+      }
+      // messages 数组里是 user/assistant
+      if (Array.isArray(body.messages)) {
+        for (const msg of body.messages) {
+          kelivoMessages.push({ role: msg.role, content: normalizeContentToText(msg.content) });
+        }
+      }
+
+      if (kelivoMessages.length > 0) {
+        const tsDB = loadTimestampDB();
+        let tsDBDirty = false;
+        for (const msg of kelivoMessages) {
+          if (msg.role === "system") continue;
+          const ts = extractTimestamp(msg.content);
+          if (!ts) continue;
+          const fp = makeFingerprint(msg);
+          const fpStripped = makeFingerprintStripped(msg);
+          if (!tsDB[fp]) { tsDB[fp] = ts.toISOString(); tsDBDirty = true; }
+          if (!tsDB[fpStripped]) { tsDB[fpStripped] = ts.toISOString(); tsDBDirty = true; }
+        }
+        if (tsDBDirty) saveTimestampDB(tsDB);
+
+        const finalTimeline = buildTimeline(kelivoMessages, tsDB);
+        saveTimeline(finalTimeline);
+      }
+    } catch (timelineErr) {
+      console.error("Timeline 写入失败（不影响转发）:", timelineErr.message);
+    }
+
+    // ---- 转发请求 ----
     const response = await fetch(TARGET_API_URL.replace("/chat/completions", "/messages"), {
       method: "POST",
       headers: {
